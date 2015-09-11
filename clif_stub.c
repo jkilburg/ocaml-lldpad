@@ -138,7 +138,7 @@ clif_pending_waiting_stub(value caml_clif, value caml_waittime)
   CAMLparam2(caml_clif, caml_waittime);
   int retval;
 
-  retval = clif_pending(Clif_val(caml_clif), Int_val(caml_waittime));
+  retval = clif_pending_wait(Clif_val(caml_clif), Int_val(caml_waittime));
   
   CAMLreturn(Val_int(retval));
 }
@@ -157,7 +157,7 @@ clif_get_fd_stub(value caml_clif)
 CAMLprim value
 clif_getpid_stub(value unit)
 {
-  CAMLparam1(Val_unit);
+  CAMLparam1(unit);
   pid_t pid;
 
   pid = clif_getpid();
@@ -171,7 +171,7 @@ clif_vsi_stub(value caml_clif, value caml_ifname, value caml_tlvid, value caml_c
   CAMLparam5(caml_clif, caml_ifname, caml_tlvid, caml_cmd, caml_reply);
   CAMLlocal1(caml_result);
   int retval;
-  unsigned int tlvid = Int_val(tlvid);
+  unsigned int tlvid = Int_val(caml_tlvid);
   char *ifname = String_val(caml_ifname);
   char *cmd = String_val(caml_cmd);
   char *reply = String_val(caml_reply);
@@ -214,7 +214,7 @@ clif_vsiwait_stub(value caml_clif, value caml_ifname, value caml_tlvid,
   CAMLlocal1(caml_result);
   int retval;
   int waittime = Int_val(caml_waittime);
-  unsigned int tlvid = Int_val(tlvid);
+  unsigned int tlvid = Int_val(caml_tlvid);
   char *ifname = String_val(caml_ifname);
   char *cmd = String_val(caml_cmd);
   char *reply = String_val(caml_reply);
