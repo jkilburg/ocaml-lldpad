@@ -22,6 +22,20 @@ static struct custom_operations lldpad_clif_default_ops = {
 
 #define Clif_val(v) (*((struct clif **) Data_custom_val(v)))
 
+/* swiped from http://www.linux-nantes.org/~fmonnier/OCaml/ocaml-wrapping-c.html */
+
+#define Val_none Val_int(0)
+
+static value
+Val_some(value v)
+{
+  CAMLparam1(v);
+  CAMLlocal1(some);
+  some = caml_alloc(1, 0);
+  Store_field(some, 0, v);
+  CAMLreturn(some);
+}
+
 CAMLprim value
 clif_open_stub(value unit)
 {
@@ -30,11 +44,12 @@ clif_open_stub(value unit)
   struct clif *clif;
   
   clif = clif_open();
-  
-  caml_clif = alloc_custom(&lldpad_clif_default_ops, sizeof(struct clif *), 0, 1);
+  if (clif == NULL) CAMLreturn (Val_none);
+
+  caml_clif = alloc_custom(&lldpad_clif_default_ops, sizeof(struct clif *), 0, 1);  
   Clif_val(caml_clif) = clif;
   
-  CAMLreturn(caml_clif);
+  CAMLreturn(Val_some(caml_clif));
 }
 
 CAMLprim value
@@ -53,11 +68,15 @@ clif_request_stub(value caml_clif, value caml_cmd, value caml_reply)
   CAMLparam3(caml_clif, caml_cmd, caml_reply);
   int retval;
   char *cmd = String_val(caml_cmd);
-  int cmd_len = caml_string_length(caml_cmd);
+  size_t cmd_len = caml_string_length(caml_cmd);
   char *reply = String_val(caml_reply);
   size_t reply_len = caml_string_length(caml_reply);
-  
+
   retval = clif_request(Clif_val(caml_clif), cmd, cmd_len, reply, &reply_len, NULL);
 
+  /* we truncate reply_len here but we will not have a reply that exceeds 2^31 in length
+     and we overload the return value a bit. */
+  if (retval == 0) CAMLreturn(Val_int(reply_len));
+  
   CAMLreturn(Val_int(retval));
 }

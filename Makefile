@@ -4,15 +4,16 @@ OCAMLMKLIB = ocamlmklib
 GCC = gcc
 OCAML = ocaml
 
-all: llpdad.cma
+all: lldptool
 
-llpdad.cma: llpdad.cmo Llpdad.so
-        $(OCAMLC) -a -custom -o llpdad.cma llpdad.cmo -dllib llpdad.so -cclib -lllpdad
+lldp_clif.cma: lldp_clif.cmo dlllldp_clif.so
+	$(OCAMLC) -a -custom -o lldp_clif.cma lldp_clif.cmo -dllib dlllldp_clif.so -cclib -llldp_clif
 
-llpdad.cmo: llpdad.ml
-        $(OCAMLC) llpdad.ml
+lldp_clif.cmo: lldp_clif.ml
+	$(OCAMLC) lldp_clif.ml
 
-llpdad.so: llpdad.o
-        $(OCAMLMKLIB) -o llpdad clif_stub.o -lkrb5
+dlllldp_clif.so: clif_stub.o
+	$(OCAMLMKLIB) -o lldp_clif clif_stub.o -llldp_clif
 
-clif_stub.o: clif_stub.c
+lldptool: lldp_clif.cma
+	$(OCAML) lldp_clif.cma lldptool.ml
