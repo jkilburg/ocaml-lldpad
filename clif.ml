@@ -81,7 +81,12 @@ let helper t cmd =
 
 let clif_detach t = helper t "D" ;;
 
-let clif_attach t tlvs = helper t (sprintf "A%s" (String.concat ~sep:"," tlvs)) ;;
+let clif_attach t tlvs =
+  List.map tlvs ~f:(sprintf "%02x")
+  |> String.concat ~sep:","
+  |> sprintf "A%s"
+  |> helper t
+;;
 
 let clif_recv t reply =
   Reader.read t.reader reply
