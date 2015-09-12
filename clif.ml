@@ -1,12 +1,10 @@
 open Core.Std
 open Async.Std
 
-module CU = Core.Std.Unix
-              
 type t = {
-  socket       : UnixLabels.file_descr;
-  connect_addr : CU.sockaddr;
-  bind_addr    : CU.sockaddr;
+  socket : ([ `Active ], Socket.Address.Unix.t) Socket.t;
+  reader : Reader.t;
+  writer : Writer.t;
 }
 
 let connect_socket_name () =
@@ -16,56 +14,43 @@ let connect_socket_name () =
 
 let bind_socket_name () =
   (Char.of_int_exn 0 |> String.of_char)
-  ^ sprintf "/com/intel/lldpad/%d" (CU.getpid () |> Pid.to_int)
+  ^ sprintf "/com/intel/lldpad/%d" (Unix.getpid () |> Pid.to_int)
 ;;
 
-let make_socket bind_addr connect_addr =
-  In_thread.run ~name:"clif"
-    (fun () ->
-       Or_error.try_with
-         (fun () ->
-            let socket =
-              CU.socket
-                ~kind:CU.SOCK_DGRAM
-                ~domain:CU.PF_UNIX
-                ~protocol:0
-            in
-            CU.bind socket ~addr:bind_addr;
-            CU.connect socket ~addr:connect_addr;
-            socket))
+let make_socket () =
+  let bind_addr = Socket.Address.Unix.create (bind_socket_name ()) in
+  let connect_addr = Socket.Address.Unix.create (connect_socket_name ()) in
+  let socket = Socket.create Socket.Type.unix_dgram in
+  Socket.bind socket bind_addr
+  >>= fun socket ->
+  Socket.connect socket connect_addr
+;;
+
+(* snarfed from async_extra *)
+let reader_writer_of_sock ?buffer_age_limit ?reader_buffer_size s =
+  let fd = Socket.fd s in
+  (Reader.create ?buf_len:reader_buffer_size fd,
+   Writer.create ?buffer_age_limit fd)
 ;;
 
 let clif_open () =
-  let bind_addr = CU.ADDR_UNIX (bind_socket_name ()) in
-  let connect_addr = CU.ADDR_UNIX (connect_socket_name ()) in
-  make_socket bind_addr connect_addr
-  >>=? fun socket ->
-  Deferred.Or_error.return { socket; connect_addr; bind_addr }
+  make_socket ()
+  >>= fun socket ->
+  let (reader,writer) = reader_writer_of_sock socket in
+  Deferred.Or_error.return { socket; reader; writer }
 ;;
 
 let clif_close t =
-  CU.close t.socket;
-  Deferred.unit
-;;
-
-let send t buf =
-  In_thread.run ~name:"clif"
-    (fun () -> Or_error.try_with (fun () -> CU.send t.socket ~buf ~pos:0 ~len:(Bytes.length buf) ~mode:[]))
-;;
-
-let recv t buf =
-  In_thread.run ~name:"clif"
-    (fun () -> Or_error.try_with (fun () -> CU.recv t.socket ~buf ~pos:0 ~len:(Bytes.length buf) ~mode:[]))
+  Socket.shutdown t.socket `Both;
+  Deferred.Or_error.ok_unit
 ;;
 
 let rec clif_request ?f t cmd reply =
-  send t cmd
-  >>=? fun _ ->
-  recv t reply
-  >>=? function
-  | 0   -> Deferred.Or_error.error_string "Unexpected reply of length zero."
-  | res when res < 0 -> Deferred.Or_error.errorf "Error return code %d" res
-  | res ->
+  Writer.write t.writer cmd;
+  Reader.read t.reader reply
+  >>= function
+  | `Eof  -> Deferred.Or_error.error_string "Unexpected EOF reading clif socket."
+  | `Ok res ->
     let is_event_msg =
       match Bytes.get reply 0 with
       | 'M' -> res > 9 && Bytes.get reply 9 = 'E'
@@ -86,15 +71,29 @@ let helper t cmd =
   let reply = Bytes.create 10 in
   clif_request t cmd reply
   >>= function
-  | Error _ as e     -> return e
-  | Ok x when x >= 3 ->
+  | Error _ as e -> return e
+  | Ok x ->
     let str = Bytes.sub_string reply 0 x in
     if String.is_prefix ~prefix:"R00" str
     then Deferred.Or_error.ok_unit
-    else Deferred.Or_error.errorf "Expected response R00 got %s" str
-  | Ok x             -> Deferred.Or_error.errorf "Expected 3 byte response, got %d" x
+    else Deferred.Or_error.errorf "Expected response starting with R00 got %s" str
 ;;
 
 let clif_detach t = helper t "D" ;;
 
-let clif_attach t _tlvs = helper t "A" ;;
+let clif_attach t tlvs = helper t (sprintf "A%s" (String.concat ~sep:"," tlvs)) ;;
+
+let clif_recv t reply =
+  Reader.read t.reader reply
+  >>= function
+  | `Eof -> Deferred.Or_error.error_string "Unexpected EOF"
+  | `Ok res -> Deferred.Or_error.return res
+;;
+
+let clif_pending t =
+  Fd.ready_to (Socket.fd t.socket) `Read
+  >>= function
+  | `Ready -> Deferred.Or_error.return true
+  | `Bad_fd -> Deferred.Or_error.error_string "Bad socket file descriptor."
+  | `Closed -> Deferred.Or_error.error_string "Socket closed."
+;;
