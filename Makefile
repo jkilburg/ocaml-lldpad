@@ -27,8 +27,8 @@ clif.cmx: clif.ml clif.cmi Makefile
 lldptool: clif.cmx lldptool.ml Makefile
 	ocamlfind ocamlopt -thread -g -o $@ -linkpkg -package core -package async_kernel -package async clif.cmx lldptool.ml
 
-liblldp.a: lldp_socket.o
-	$(OCAMLMKLIB) -custom -oc lldp lldp_socket.o
+liblldp.a: lldp_socket.o netdevice.o
+	$(OCAMLMKLIB) -custom -oc lldp lldp_socket.o netdevice.o
 
 lldp.cmx: lldp.ml Makefile
 	ocamlfind ocamlopt -thread -g -c $<

@@ -37,7 +37,7 @@
 #include <net/if.h>
 #include <errno.h>
 #include <netinet/in.h>
-#include <linux/if_ether.h>
+#include <net/ethernet.h>
 
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
