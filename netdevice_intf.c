@@ -83,6 +83,14 @@ siocgifconf_c(value caml_socket)
   RESULT(caml_iflist, 0);
 }
 
+static void
+copyifname(char *dst, char *src)
+{
+  strncpy(dst, src, IFNAMSIZ);
+  dst[IFNAMSIZ - 1] = '\0';
+  return;
+}
+
 #define GET_FIELD(REQUEST, FUNCNAME, GETTER)		\
   CAMLprim value					\
   FUNCNAME(value caml_socket, value caml_ifname)	\
@@ -93,7 +101,7 @@ siocgifconf_c(value caml_socket)
     struct ifreq ifr;					\
 							\
     memset(&ifr, 0, sizeof(struct ifreq));		\
-    strcpy(ifr.ifr_name, ifname);			\
+    copyifname(ifr.ifr_name, ifname);			\
     FI(socket, REQUEST, &ifr);				\
     RESULT(GETTER, 0);					\
   }
@@ -104,14 +112,15 @@ GET_FIELD(SIOCGIFFLAGS, siocgifflags_c, Val_int(ifr.ifr_flags))
 GET_FIELD(SIOCGIFPFLAGS, siocgifpflags_c, Val_int(ifr.ifr_flags))
 GET_FIELD(SIOCGIFTXQLEN, siocgiftxqlen_c, Val_int(ifr.ifr_qlen))
 
+#define ETHERNET_MAC_LEN 6
+
 static value
 get_hwaddr(struct ifreq *ifr)
 {
   int len;
   value addr;
 
-  if (ifr->ifr_hwaddr.sa_family == ARPHRD_ETHER) len = 6;
-  else if (ifr->ifr_hwaddr.sa_family == ARPHRD_INFINIBAND) len = 16;
+  if (ifr->ifr_hwaddr.sa_family == ARPHRD_ETHER) len = ETHERNET_MAC_LEN;
   else caml_failwith("UNSUPPORTED HARDWARE IN SIOCGIFHWADDR");
  
   addr = caml_alloc_string(len);
@@ -125,22 +134,49 @@ GET_FIELD(SIOCGIFADDR, siocgifaddr_c, caml_copy_int32(((struct sockaddr_in *)&if
 GET_FIELD(SIOCGIFBRDADDR, siocgifbrdaddr_c, caml_copy_int32(((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_addr.s_addr))
 GET_FIELD(SIOCGIFNETMASK, siocgifnetmask_c, caml_copy_int32(((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr.s_addr))
 
-#define SET_FLAGS(REQUEST, FUNCNAME)					\
+#define SET_FIELD(REQUEST, FUNCNAME, SETTER)				\
   CAMLprim value							\
-  FUNCNAME(value caml_socket, value caml_ifname, value caml_ifflags)	\
+  FUNCNAME(value caml_socket, value caml_ifname, value caml_val)	\
   {									\
-    CAMLparam3(caml_socket, caml_ifname, caml_ifflags);			\
+    CAMLparam3(caml_socket, caml_ifname, caml_val);			\
     int socket = Int_val(caml_socket);					\
     char *ifname = String_val(caml_ifname);				\
-    short ifflags = Int_val(caml_ifflags);				\
     struct ifreq ifr;							\
     									\
     memset(&ifr, 0, sizeof(struct ifreq));				\
-    strcpy(ifr.ifr_name, ifname);					\
-    ifr.ifr_flags = ifflags;						\
+    copyifname(ifr.ifr_name, ifname);					\
+    SETTER;								\
     FI(socket, REQUEST, &ifr);						\
-    RESULT(Val_int(ifr.ifr_flags), 0);					\
+    RESULT(Val_unit, 0);						\
   }
 
-SET_FLAGS(SIOCSIFFLAGS, siocsifflags_c)
-SET_FLAGS(SIOCSIFPFLAGS, siocsifpflags_c)
+SET_FIELD(SIOCSIFFLAGS, siocsifflags_c, ifr.ifr_flags = Int_val(caml_val))
+SET_FIELD(SIOCSIFPFLAGS, siocsifpflags_c, ifr.ifr_flags = Int_val(caml_val))
+SET_FIELD(SIOCSIFMTU, siocsifmtu_c, ifr.ifr_mtu = Int_val(caml_val))
+SET_FIELD(SIOCSIFTXQLEN, siocsiftxqlen_c, ifr.ifr_qlen = Int_val(caml_val))
+
+SET_FIELD(SIOCSIFNAME, siocsifname_c, copyifname(ifr.ifr_newname, String_val(caml_val)))
+
+static void
+set_hwaddr(struct sockaddr *sa, value hwaddr)
+{
+  /* quick and dirty checks */
+  if (caml_string_length(hwaddr) != ETHERNET_MAC_LEN) caml_failwith("Expected 6 byte ethernet MAC");
+  memcpy(sa->sa_data, String_val(hwaddr), ETHERNET_MAC_LEN);
+  return;
+}
+
+SET_FIELD(SIOCSIFHWADDR, siocsifhwaddr_c, set_hwaddr(&ifr.ifr_hwaddr, caml_val))
+
+static void
+set_ipaddr(struct sockaddr *sa, value ipaddr)
+{
+  struct sockaddr_in *sin = (struct sockaddr_in *)sa;
+  sin->sin_family = AF_INET;
+  sin->sin_addr.s_addr = Int32_val(ipaddr);
+  return;
+}
+
+SET_FIELD(SIOCSIFADDR, siocsifaddr_c, set_ipaddr(&ifr.ifr_addr, caml_val))
+SET_FIELD(SIOCSIFBRDADDR, siocsifbrdaddr_c, set_ipaddr(&ifr.ifr_broadaddr, caml_val))
+SET_FIELD(SIOCSIFNETMASK, siocsifnetmask_c, set_ipaddr(&ifr.ifr_netmask, caml_val))
