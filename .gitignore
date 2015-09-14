@@ -2,6 +2,7 @@
 *.cmi
 *.cma
 *.cmx
+*.cmxa
 *.a
 *.so
 *.o
