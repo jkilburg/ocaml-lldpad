@@ -102,6 +102,7 @@ GET_FIELD(SIOCGIFINDEX, siocgifindex_c, Val_int(ifr.ifr_ifindex))
 GET_FIELD(SIOCGIFMTU, siocgifmtu_c, Val_int(ifr.ifr_mtu))
 GET_FIELD(SIOCGIFFLAGS, siocgifflags_c, Val_int(ifr.ifr_flags))
 GET_FIELD(SIOCGIFPFLAGS, siocgifpflags_c, Val_int(ifr.ifr_flags))
+GET_FIELD(SIOCGIFTXQLEN, siocgiftxqlen_c, Val_int(ifr.ifr_qlen))
 
 static value
 get_hwaddr(struct ifreq *ifr)
