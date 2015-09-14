@@ -29,15 +29,15 @@ let nearest_customer_bridge = [ 0x01; 0x80; 0xc2; 0x00; 0x00; 0x00 ]
     
 let lldp_protocol_number = 0x88cc
 let arp_protocol_number = 0x0806
-let protocol_number = arp_protocol_number
 
-let lb l =
+let make_mac l =
   let b = Bytes.create (List.length l) in
   List.iteri l ~f:(fun p i -> Bytes.set b p (Char.of_int_exn i));
   b
 ;;
 
-let setup_socket () =
+let setup_socket arp =
+  let protocol_number = if arp then arp_protocol_number else lldp_protocol_number in
   let open Core.Std.Or_error in
   let error msg = function
     | Error ec  -> Or_error.errorf "%s Errno = %d" msg ec
@@ -51,11 +51,11 @@ let setup_socket () =
   >>= fun () ->
   error "Netdevice.siocgifhwaddr" (Netdevice.siocgifhwaddr fd "enp4s0")
   >>= fun hw ->
-  error "Packet.add_membership" (Packet.add_membership fd ifindex (lb nearest_bridge))
+  error "Packet.add_membership" (Packet.add_membership fd ifindex (make_mac nearest_bridge))
   >>= fun () ->
-  error "Packet.add_membership" (Packet.add_membership fd ifindex (lb nearest_nontpmr_bridge))
+  error "Packet.add_membership" (Packet.add_membership fd ifindex (make_mac nearest_nontpmr_bridge))
   >>= fun () ->
-  error "Packet.add_membership" (Packet.add_membership fd ifindex (lb nearest_customer_bridge))
+  error "Packet.add_membership" (Packet.add_membership fd ifindex (make_mac nearest_customer_bridge))
   >>= fun () ->
   printf "Interface MAC: ";
   Bytes.iter (fun c -> printf "%02x" (Char.to_int c)) hw;
@@ -65,12 +65,13 @@ let setup_socket () =
 
 let main () =
   Command.async_or_error
-    ~summary:"Print LLDP packets"
+    ~summary:"Print packets"
     Command.Spec.(
       empty
+      +> flag "-arp" no_arg ~doc:"display ARP packets (default:LLDP)"
     )
-    (fun () ->
-       match setup_socket () with
+    (fun arp () ->
+       match setup_socket arp with
        | Error _ as e -> return e
        | Ok fd ->
          let buf = Bytes.create buflen in
