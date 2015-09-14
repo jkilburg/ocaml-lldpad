@@ -42,8 +42,45 @@ siocgifname_c(value caml_socket, value caml_ifindex)
   memset(&ifr, 0, sizeof(struct ifreq));
   ifr.ifr_ifindex = ifindex;
   FI(socket, SIOCGIFNAME, &ifr);
-
+  
   RESULT(caml_copy_string(ifr.ifr_name), 0);
+}
+
+#define IFCONF_MAXLEN 32
+
+CAMLprim value
+siocgifconf_c(value caml_socket)
+{
+  CAMLparam1(caml_socket);
+  int socket = Int_val(caml_socket);
+  struct ifreq ifr[IFCONF_MAXLEN];
+  struct ifconf ifc;
+  int i;
+  value caml_iflist = Val_int(0);
+  value new_if;
+  value pair;
+  struct sockaddr_in *sin;
+  
+  ifc.ifc_len = IFCONF_MAXLEN;
+  ifc.ifc_req = ifr;
+  
+  FI(socket, SIOCGIFCONF, &ifc);
+  
+  for (i = 0; i < ifc.ifc_len; i++) {
+    /* ifname:string * ipaddr:int32 */
+    pair = caml_alloc(2, 0);
+    Store_field(pair, 0, caml_copy_string(ifc.ifc_req[i].ifr_name));
+    sin = (struct sockaddr_in *)&ifc.ifc_req[i].ifr_addr;
+    Store_field(pair, 1, caml_copy_int32(sin->sin_addr.s_addr));
+
+    /* next list node */
+    new_if = caml_alloc(2, 0);
+    Store_field(new_if, 0, pair);
+    Store_field(new_if, 1, caml_iflist);
+    caml_iflist = new_if;
+  }
+  
+  RESULT(caml_iflist, 0);
 }
 
 #define GET_FIELD(REQUEST, FUNCNAME, GETTER)		\
@@ -71,11 +108,11 @@ get_hwaddr(struct ifreq *ifr)
 {
   int len;
   value addr;
-	      
+
   if (ifr->ifr_hwaddr.sa_family == ARPHRD_ETHER) len = 6;
   else if (ifr->ifr_hwaddr.sa_family == ARPHRD_INFINIBAND) len = 16;
   else caml_failwith("UNSUPPORTED HARDWARE IN SIOCGIFHWADDR");
-
+ 
   addr = caml_alloc_string(len);
   memcpy(String_val(addr), ifr->ifr_hwaddr.sa_data, len);
   return addr;
