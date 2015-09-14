@@ -87,7 +87,7 @@ GET_FIELD(SIOCGIFADDR, siocgifaddr_c, caml_copy_int32(((struct sockaddr_in *)&if
 GET_FIELD(SIOCGIFBRDADDR, siocgifbrdaddr_c, caml_copy_int32(((struct sockaddr_in *)&ifr.ifr_broadaddr)->sin_addr.s_addr))
 GET_FIELD(SIOCGIFNETMASK, siocgifnetmask_c, caml_copy_int32(((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr.s_addr))
 
-#define SET_FIELD(REQUEST, FUNCNAME)					\
+#define SET_FLAGS(REQUEST, FUNCNAME)					\
   CAMLprim value							\
   FUNCNAME(value caml_socket, value caml_ifname, value caml_ifflags)	\
   {									\
