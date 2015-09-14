@@ -33,8 +33,11 @@ packet.cmx: packet.ml Makefile
 netdevice.cmx: netdevice.ml Makefile
 	ocamlfind ocamlopt -thread -g -c -package core $<
 
-liblldp.a: packet_intf.o netdevice_intf.o netdevice.cmx packet.cmx Makefile
-	$(OCAMLMKLIB) -custom -oc lldp packet_intf.o netdevice_intf.o netdevice.cmx packet.cmx
+socket.cmx: socket.ml Makefile
+	ocamlfind ocamlopt -thread -g -c -package core $<
+
+liblldp.a: packet_intf.o netdevice_intf.o socket_intf.o netdevice.cmx packet.cmx socket.cmx Makefile
+	$(OCAMLMKLIB) -custom -oc lldp packet_intf.o netdevice_intf.o netdevice.cmx packet.cmx socket.cmx
 
 lldpd: lldpd.ml liblldp.a Makefile
 	ocamlfind ocamlopt -thread -g -o $@ -linkpkg -package core -package async_kernel -package async lldpd.ml liblldp.a

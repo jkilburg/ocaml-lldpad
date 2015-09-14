@@ -39,7 +39,7 @@ packet_socket_c(value caml_protocol)
 {
   CAMLparam1(caml_protocol);
   int fd;
-  int protocol = Int_val(caml_protocol);
+  short protocol = htons(Int_val(caml_protocol));
 
   fd = socket(PF_PACKET, SOCK_RAW, protocol);
   if (fd < 0) CAMLreturn(result(Val_unit, errno == 0 ? -1:errno));
@@ -54,7 +54,7 @@ packet_bind_c(value caml_socket, value caml_ifindex, value caml_protocol)
   struct sockaddr_ll ll;
   int socket = Int_val(caml_socket);
   int ifindex = Int_val(caml_ifindex);
-  int protocol = Int_val(caml_protocol);
+  int protocol = htons(Int_val(caml_protocol));
   
   memset(&ll, 0, sizeof(ll));
   ll.sll_family = PF_PACKET;
