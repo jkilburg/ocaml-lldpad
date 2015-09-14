@@ -1,15 +1,9 @@
-#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <syslog.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
-#include <linux/if_packet.h>
-#include <linux/pkt_sched.h>
-#include <net/if.h>
 #include <errno.h>
-#include <netinet/in.h>
-#include <net/ethernet.h>
+
+#include <arpa/inet.h>
+#include <linux/if_packet.h>
 
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
