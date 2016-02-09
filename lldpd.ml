@@ -10,7 +10,20 @@ let recv fd buf =
     (fun () -> CU.recv fd ~buf ~pos:0 ~len:buflen ~mode:[])
 ;;
 
-let rec read_all fd buf =
+let rec read_all_lldp fd buf =
+  recv fd buf
+  >>= function
+  | 0 -> Deferred.Or_error.error_string "Unexpected zero length packet"
+  | res when res < 0 -> Deferred.Or_error.errorf "recv err %d" res
+  | res ->
+    printf "TLV:\n";
+    Cstruct.of_string (Bytes.sub_string buf 0 res)
+    |> Openflow.Lldp.parse_lldp_tlvs
+    |> List.iter ~f:(fun _ -> printf "X\n");
+    read_all_lldp fd buf
+;;
+
+let rec read_all_arp fd buf =
   recv fd buf
   >>= function
   | 0 -> Deferred.Or_error.error_string "Unexpected zero length packet"
@@ -20,7 +33,7 @@ let rec read_all fd buf =
     Bytes.sub_string buf 0 res
     |> String.to_list
     |> List.iter ~f:(fun c -> printf "%02x\n" (Char.to_int c));
-    read_all fd buf
+    read_all_arp fd buf
 ;;
 
 let nearest_bridge = [ 0x01; 0x80; 0xc2; 0x00; 0x00; 0x0e ]
@@ -36,7 +49,7 @@ let make_mac l =
   b
 ;;
 
-let setup_socket arp =
+let setup_socket arp interface =
   let protocol_number = if arp then arp_protocol_number else lldp_protocol_number in
   let open Core.Std.Or_error in
   let error msg = function
@@ -45,11 +58,11 @@ let setup_socket arp =
   in
   error "Packet.socket" (Packet.socket protocol_number)
   >>= fun fd ->
-  error "Netdevice.siocgifindex" (Netdevice.siocgifindex fd "enp4s0")
+  error "Netdevice.siocgifindex" (Netdevice.siocgifindex fd interface)
   >>= fun ifindex ->
   error "Packet.bind" (Packet.bind fd ifindex protocol_number)
   >>= fun () ->
-  error "Netdevice.siocgifhwaddr" (Netdevice.siocgifhwaddr fd "enp4s0")
+  error "Netdevice.siocgifhwaddr" (Netdevice.siocgifhwaddr fd interface)
   >>= fun hw ->
   error "Packet.add_membership" (Packet.add_membership fd ifindex (make_mac nearest_bridge))
   >>= fun () ->
@@ -69,13 +82,16 @@ let main () =
     Command.Spec.(
       empty
       +> flag "-arp" no_arg ~doc:"display ARP packets (default:LLDP)"
+      +> anon ( "INTERFACE" %: string)
     )
-    (fun arp () ->
-       match setup_socket arp with
+    (fun arp interface () ->
+       match setup_socket arp interface with
        | Error _ as e -> return e
        | Ok fd ->
          let buf = Bytes.create buflen in
-         read_all (CU.File_descr.of_int fd) buf)
+         if arp
+         then read_all_arp (CU.File_descr.of_int fd) buf
+         else read_all_lldp (CU.File_descr.of_int fd) buf)
 ;;
 
 let () = Command.run (main ())

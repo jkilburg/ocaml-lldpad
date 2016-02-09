@@ -40,4 +40,4 @@ liblldp.a: packet_intf.o netdevice_intf.o socket_intf.o netdevice.cmx packet.cmx
 	$(OCAMLMKLIB) -custom -oc lldp packet_intf.o netdevice_intf.o netdevice.cmx packet.cmx socket.cmx
 
 lldpd: lldpd.ml liblldp.a Makefile
-	ocamlfind ocamlopt -thread -g -o $@ -linkpkg -package core -package async_kernel -package async lldpd.ml liblldp.a
+	ocamlfind ocamlopt -thread -g -o $@ -linkpkg -package core -package async_kernel -package async -package openflow -package cstruct -package netlink lldpd.ml liblldp.a
